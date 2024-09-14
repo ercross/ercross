@@ -34,3 +34,6 @@ It will be in the format `inet 192.168.x.x.`
 2. Make the binary executable if needed `chmod +x ercross` on Linux/MacOS
 3. Add binary to your system PATH `sudo mv myprogram /usr/local/bin/` or simply double-click on the binary if on Windows
 4. Run the binary `ercross start`
+
+## Limitations
+- Single Connection: Ercross is currently designed handle only one active connection (websocket or peerConnection)

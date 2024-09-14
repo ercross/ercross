@@ -1,1 +1,2 @@
 - create a bash script for installation
+- handle video track and audio track; rewrite handleRemoteTrack
