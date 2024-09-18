@@ -2,56 +2,49 @@ package main
 
 import (
 	"fmt"
-	"github.com/pion/rtcp"
 	"github.com/pion/webrtc/v4"
 	"os/exec"
-	"time"
 )
 
-func handleRemoteTrack(track *webrtc.TrackRemote, _ *webrtc.RTPReceiver) {
-	cmd := exec.Command(
+func handleTrack(track *webrtc.TrackRemote, _ *webrtc.RTPReceiver) {
+	if track.Kind() == webrtc.RTPCodecTypeVideo {
+		if err := handleVideoRemoteTrack(track); err != nil {
+			panic(fmt.Errorf("error encountered while handling video track: %v", err))
+		}
+	}
+	fmt.Printf("Track %v has not been handled\n", track.Kind())
+}
+
+func handleVideoRemoteTrack(track *webrtc.TrackRemote) error {
+	ffmpegCmd := exec.Command(
 		"ffmpeg",
-		"-f", "rawvideo",
-		"-pix_fmt", "yuv420p",
-		"-s", "640x480",
-		"-i", "-",
-		"-f", "avfoundation",
-		"OBS Virtual Camera",
+		"-i", "pipe:0", // read input from stdin (piped data)
+		"-vf", "format=yuv420p", // convert to yuv420p format (suitable for virtual camera)
+		"-f", "avfoundation", // output format for macOS
+		"OBS Virtual Camera", // virtual camera target
 	)
 
-	// pipe stdin to ffmpeg
-	stdin, err := cmd.StdinPipe()
+	// create pipe for sending RTP packets to FFmpeg
+	stdin, err := ffmpegCmd.StdinPipe()
 	if err != nil {
-		panic(fmt.Errorf("Failed to create stdin pipe: %v\n", err))
+		return fmt.Errorf("failed to setup ffmpeg input pipe: %w\n", err)
 	}
 
-	if err = cmd.Start(); err != nil {
-		panic(fmt.Errorf("Failed to start command: %v\n", err))
+	if err = ffmpegCmd.Start(); err != nil {
+		return fmt.Errorf("failed to start ffmpeg command: %w", err)
 	}
 
-	// send periodic RTP picture loss indication (PLI) to request keyframes
-	go func() {
-		ticker := time.NewTicker(time.Second * 3)
-		for range ticker.C {
-			rtcpErr := peerConnection.WriteRTCP([]rtcp.Packet{
-				&rtcp.PictureLossIndication{MediaSSRC: uint32(track.SSRC())},
-			})
-			if rtcpErr != nil {
-				fmt.Printf("Failed to send rtcp: %v\n", rtcpErr)
-			}
-		}
-	}()
+	defer stdin.Close()
+	defer ffmpegCmd.Wait()
 
-	// read RTP packets and write them to ffmpeg stdin
 	for {
-		rtp, _, err := track.ReadRTP()
+		rtpPacket, _, err := track.ReadRTP()
 		if err != nil {
-			panic(fmt.Errorf("Failed to read RTP: %v\n", err))
+			return fmt.Errorf("failed to read rtp packet: %w", err)
 		}
 
-		_, err = stdin.Write(rtp.Payload)
-		if err != nil {
-			fmt.Printf("Failed to write payload: %v\n", err)
+		if _, err = stdin.Write(rtpPacket.Payload); err != nil {
+			return fmt.Errorf("failed to write rtp packet: %w", err)
 		}
 	}
 }

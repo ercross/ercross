@@ -149,7 +149,7 @@ func initPeerConnection() error {
 		sendIceCandidateToRemotePeer(candidate)
 	})
 
-	peerConnection.OnTrack(handleRemoteTrack)
+	peerConnection.OnTrack(handleTrack)
 
 	peerConnection.OnConnectionStateChange(func(state webrtc.PeerConnectionState) {
 		fmt.Printf("Connection state has changed: %s\n", state.String())
